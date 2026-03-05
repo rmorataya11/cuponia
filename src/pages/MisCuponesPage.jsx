@@ -95,17 +95,29 @@ export default function MisCuponesPage() {
         </div>
       ) : (
         <ul className="space-y-3">
-          {list.map((c) => (
+          {list.map((c) => {
+            const oferta = ofertasMap[c.ofertaId];
+            const fotoURL = oferta?.fotoURL;
+            return (
             <li
               key={c.id}
               className="bg-white rounded-xl border border-slate-200/80 shadow-card p-5 flex flex-wrap items-center justify-between gap-4"
             >
-              <div>
-                <p className="font-mono font-semibold text-slate-900 text-sm">{c.codigo}</p>
-                <p className="text-slate-600 mt-0.5 text-sm">{ofertasMap[c.ofertaId]?.titulo ?? 'Oferta'}</p>
-                <p className="text-xs text-slate-500 mt-2">
-                  Comprado: {c.fechaCompra} · Válido hasta: {c.fechaLimiteUso}
-                </p>
+              <div className="flex gap-4 flex-1 min-w-0">
+                {fotoURL && (
+                  <img
+                    src={fotoURL}
+                    alt=""
+                    className="w-20 h-20 object-cover rounded-lg shrink-0 bg-slate-100"
+                  />
+                )}
+                <div className="min-w-0">
+                  <p className="font-mono font-semibold text-slate-900 text-sm">{c.codigo}</p>
+                  <p className="text-slate-600 mt-0.5 text-sm">{oferta?.titulo ?? 'Oferta'}</p>
+                  <p className="text-xs text-slate-500 mt-2">
+                    Comprado: {c.fechaCompra} · Válido hasta: {c.fechaLimiteUso}
+                  </p>
+                </div>
               </div>
               {tab === 'disponibles' && (
                 <button
@@ -117,7 +129,8 @@ export default function MisCuponesPage() {
                 </button>
               )}
             </li>
-          ))}
+          );
+          })}
         </ul>
       )}
     </div>

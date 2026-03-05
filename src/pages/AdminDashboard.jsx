@@ -687,6 +687,7 @@ function OfertasSection({ ofertas, setOfertas, empresas = [], rubros = [], onRef
     cantidadLimite: '',
     descripcion: '',
     otrosDetalles: '',
+    fotoURL: '',
   });
 
   const handleFormChange = (e) => {
@@ -708,7 +709,7 @@ function OfertasSection({ ofertas, setOfertas, empresas = [], rubros = [], onRef
     setSaving(true);
     try {
       await addOferta(form);
-      setForm({ empresaId: '', rubroId: '', titulo: '', precioRegular: '', precioOferta: '', fechaInicio: '', fechaFin: '', fechaLimiteUso: '', cantidadLimite: '', descripcion: '', otrosDetalles: '' });
+      setForm({ empresaId: '', rubroId: '', titulo: '', precioRegular: '', precioOferta: '', fechaInicio: '', fechaFin: '', fechaLimiteUso: '', cantidadLimite: '', descripcion: '', otrosDetalles: '', fotoURL: '' });
       setShowForm(false);
       await onRefetch?.();
     } catch (err) {
@@ -794,6 +795,10 @@ function OfertasSection({ ofertas, setOfertas, empresas = [], rubros = [], onRef
                   <option key={r.id} value={r.id}>{r.nombre}</option>
                 ))}
               </select>
+            </div>
+            <div className="sm:col-span-2">
+              <label className="block text-xs font-semibold tracking-wider text-slate-400 uppercase mb-1">URL de la imagen (opcional)</label>
+              <input type="url" name="fotoURL" value={form.fotoURL} onChange={handleFormChange} className="w-full px-4 py-2 border border-slate-200 rounded-lg bg-white focus:border-[#2d3fc2] focus:outline-none text-slate-900" placeholder="https://ejemplo.com/imagen.jpg" />
             </div>
             <div className="sm:col-span-2">
               <label className="block text-xs font-semibold tracking-wider text-slate-400 uppercase mb-1">Título *</label>
@@ -1112,7 +1117,6 @@ function RubrosSection({ rubros, setRubros, onRefetch }) {
           {error}
         </div>
       )}
-      <p className="text-slate-500 text-sm">Escribí el nombre del rubro y hacé clic en Agregar. Se guarda en Firebase.</p>
       <div className="flex flex-wrap items-center gap-2">
         <input
           type="text"

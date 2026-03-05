@@ -82,6 +82,15 @@ export default function OfertaDetailPage() {
       </Link>
 
       <article className="bg-white rounded-xl border border-slate-200/80 shadow-card overflow-hidden">
+        {oferta.fotoURL && (
+          <div className="aspect-[16/10] w-full bg-slate-100">
+            <img
+              src={oferta.fotoURL}
+              alt=""
+              className="w-full h-full object-cover"
+            />
+          </div>
+        )}
         <div className="p-6 sm:p-8">
           {rubro && (
             <span className="inline-block px-2.5 py-1 text-xs font-medium bg-slate-100 text-slate-600 rounded-md mb-3">

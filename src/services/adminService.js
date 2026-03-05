@@ -54,6 +54,7 @@ export async function addOferta(data) {
     empresaId: data.empresaId || '',
     rubroId: data.rubroId || '',
     cuponesVendidos: 0,
+    fotoURL: (data.fotoURL || '').trim() || null,
   });
   return ref.id;
 }

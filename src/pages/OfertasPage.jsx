@@ -93,12 +93,26 @@ export default function OfertasPage() {
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((o) => (
+          {filtered.map((o) => {
+            const fotoURL = (o.fotoURL || o.foto_url || '').trim() || null;
+            return (
             <Link
               key={o.id}
               to={`/ofertas/${o.id}`}
-              className="group block bg-white rounded-xl border border-slate-200/80 p-5 shadow-card hover:shadow-card-hover hover:border-slate-300/80 transition-all duration-150"
+              className="group block bg-white rounded-xl border border-slate-200/80 overflow-hidden shadow-card hover:shadow-card-hover hover:border-slate-300/80 transition-all duration-150"
             >
+              {fotoURL && (
+                <div className="aspect-[16/10] w-full bg-slate-100">
+                  <img
+                    src={fotoURL}
+                    alt=""
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                    onError={(e) => { e.target.parentElement.style.display = 'none'; }}
+                  />
+                </div>
+              )}
+              <div className="p-5">
               <h2 className="font-semibold text-slate-900 line-clamp-2 group-hover:text-blue-800 transition-colors duration-150">
                 {o.titulo}
               </h2>
@@ -115,8 +129,10 @@ export default function OfertasPage() {
                   </span>
                 )}
               </div>
+              </div>
             </Link>
-          ))}
+          );
+          })}
         </div>
       )}
     </div>
