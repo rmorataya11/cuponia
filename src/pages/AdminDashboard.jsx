@@ -48,26 +48,71 @@ function diasHasta(fechaStr) {
   return Math.ceil(diff / (1000 * 60 * 60 * 24));
 }
 
-/** Actividad de los últimos 7 días a partir de cupones (fechaCompra o fecha). */
-function actividadDesdeCupones(cupones) {
-  const dias = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+const DIAS_SEMANA = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+function getFechaCupon(c) {
+  return (c.fechaCompra || c.fecha || '').toString().slice(0, 10);
+}
+
+/** Actividad de la semana actual (lunes a domingo). */
+function actividadSemana(cupones) {
   const hoy = new Date();
-  const porDia = {};
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date(hoy);
-    d.setDate(d.getDate() - i);
+  const dayOfWeek = hoy.getDay(); // 0=Dom, 1=Lun, ..., 6=Sáb
+  const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  const lunes = new Date(hoy);
+  lunes.setDate(lunes.getDate() - diffToMonday);
+  const out = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(lunes);
+    d.setDate(lunes.getDate() + i);
     const key = d.toISOString().slice(0, 10);
-    porDia[key] = { label: dias[d.getDay()], cupones: 0, ingresos: 0 };
+    out.push({ key, label: DIAS_SEMANA[d.getDay()], cupones: 0, ingresos: 0 });
+  }
+  const keys = out.map((o) => o.key);
+  for (const c of cupones) {
+    const fecha = getFechaCupon(c);
+    const idx = keys.indexOf(fecha);
+    if (idx !== -1) out[idx].cupones += 1;
+  }
+  return out;
+}
+
+/** Actividad del mes actual (día 1 a último día). */
+function actividadMes(cupones) {
+  const hoy = new Date();
+  const year = hoy.getFullYear();
+  const month = hoy.getMonth();
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  const out = [];
+  for (let day = 1; day <= lastDay; day++) {
+    const key = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    out.push({ key, label: String(day), cupones: 0, ingresos: 0 });
+  }
+  const keys = out.map((o) => o.key);
+  for (const c of cupones) {
+    const fecha = getFechaCupon(c);
+    const idx = keys.indexOf(fecha);
+    if (idx !== -1) out[idx].cupones += 1;
+  }
+  return out;
+}
+
+/** Actividad del año actual (12 meses). */
+function actividadAño(cupones) {
+  const year = new Date().getFullYear();
+  const out = [];
+  for (let m = 1; m <= 12; m++) {
+    const key = `${year}-${String(m).padStart(2, '0')}`;
+    out.push({ key, label: MESES[m - 1], cupones: 0, ingresos: 0 });
   }
   for (const c of cupones) {
-    const fecha = (c.fechaCompra || c.fecha || '').toString().slice(0, 10);
-    if (porDia[fecha]) {
-      porDia[fecha].cupones += 1;
-    }
+    const fecha = getFechaCupon(c);
+    const key = fecha.slice(0, 7); // YYYY-MM
+    const idx = out.findIndex((o) => o.key === key);
+    if (idx !== -1) out[idx].cupones += 1;
   }
-  return Object.keys(porDia)
-    .sort()
-    .map((k) => porDia[k]);
+  return out;
 }
 
 function mapOfertasParaUI(ofertas, empresas, rubros) {
@@ -230,19 +275,6 @@ export default function CuponiaAdminDashboard() {
             <p className="text-xs text-slate-400">{sec.subtitle}</p>
           </div>
           <div className="flex items-center gap-4">
-            <button
-              type="button"
-              className="relative p-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors"
-              title="Notificaciones"
-            >
-              🔔
-              {ofertasPendientes > 0 && (
-                <span
-                  className="absolute top-1 right-1 w-2 h-2 rounded-full"
-                  style={{ backgroundColor: PRIMARY }}
-                />
-              )}
-            </button>
             <div className="relative" ref={profileRef}>
               <button
                 type="button"
@@ -471,33 +503,35 @@ function ConfirmModal({ accion, oferta, onConfirm, onCancel }) {
   );
 }
 
-// --- MiniBarChart (divs, altura 64px) ---
+// --- MiniBarChart: barras proporcionales; solo los días con ventas se marcan con color. ---
 function MiniBarChart({ data }) {
   const max = Math.max(...data.map((d) => d.cupones), 1);
   const [hovered, setHovered] = useState(null);
+  const minBarWidth = data.length > 14 ? 8 : 0; // mes/año: barras con ancho mínimo para no comprimir demasiado
   return (
-    <div className="flex items-end gap-1 h-16">
+    <div className="flex items-end gap-1 h-16 min-w-0" style={minBarWidth ? { minWidth: data.length * (minBarWidth + 4) } : undefined}>
       {data.map((d, i) => {
-        const isLast = i === data.length - 1;
-        const h = (d.cupones / max) * 64;
+        const h = max > 0 ? (d.cupones / max) * 64 : 0;
+        const hasVentas = d.cupones > 0;
         const isHover = hovered === i;
         return (
           <div
-            key={d.label}
+            key={d.key ?? `${d.label}-${i}`}
             className="relative flex-1 flex flex-col items-center min-w-0"
             onMouseEnter={() => setHovered(i)}
             onMouseLeave={() => setHovered(null)}
           >
             {isHover && (
               <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-white border border-slate-200 rounded shadow text-slate-900 text-xs z-10 whitespace-nowrap">
-                {d.cupones} cupones · ${(d.ingresos ?? 0).toLocaleString()}
+                {d.cupones} cupón{d.cupones !== 1 ? 'es' : ''} vendido{d.cupones !== 1 ? 's' : ''}
+                {(d.ingresos ?? 0) > 0 && ` · $${(d.ingresos ?? 0).toLocaleString()}`}
               </div>
             )}
             <div
               className="w-full rounded-t transition-all"
               style={{
-                height: Math.max(h, 4),
-                backgroundColor: isLast ? PRIMARY : '#e2e8f0',
+                height: hasVentas ? Math.max(h, 6) : 0,
+                backgroundColor: hasVentas ? PRIMARY : 'transparent',
               }}
             />
             <span className="text-xs text-slate-400 mt-1 truncate w-full text-center">{d.label}</span>
@@ -511,6 +545,7 @@ function MiniBarChart({ data }) {
 // --- Dashboard (Overview) ---
 function DashboardOverview({ ofertas, setOfertas, cupones = [], totalClientes = 0, empresas = [], onNavigate }) {
   const [modal, setModal] = useState(null); // { accion: 'aprobar'|'rechazar', oferta }
+  const [actividadFiltro, setActividadFiltro] = useState('semana'); // 'semana' | 'mes' | 'año'
   const ofertasPendientes = ofertas.filter((o) => o.estado === 'pendiente').length;
   const pendientes = ofertas.filter((o) => o.estado === 'pendiente').slice(0, 3);
   const vence = (c) => (c.vence || c.fechaLimiteUso || '');
@@ -586,17 +621,46 @@ function DashboardOverview({ ofertas, setOfertas, cupones = [], totalClientes = 
       )}
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <div className="xl:col-span-2 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-          <h3 className="font-bold text-slate-900 mb-4">Actividad semanal</h3>
+        <div className="xl:col-span-2 min-w-0 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+            <h3 className="font-bold text-slate-900">Actividad</h3>
+            <div className="flex rounded-lg bg-slate-100 p-0.5">
+              {[
+                { id: 'semana', label: 'Semana' },
+                { id: 'mes', label: 'Mes' },
+                { id: 'año', label: 'Año' },
+              ].map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => setActividadFiltro(f.id)}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                    actividadFiltro === f.id ? 'bg-white text-slate-900 shadow' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          </div>
           {(() => {
-            const actividad = actividadDesdeCupones(cupones);
-            const totalCuponesSemana = actividad.reduce((s, d) => s + d.cupones, 0);
+            const actividad =
+              actividadFiltro === 'semana'
+                ? actividadSemana(cupones)
+                : actividadFiltro === 'mes'
+                  ? actividadMes(cupones)
+                  : actividadAño(cupones);
+            const total = actividad.reduce((s, d) => s + d.cupones, 0);
+            const subtitulo =
+              actividadFiltro === 'semana' ? 'Esta semana' : actividadFiltro === 'mes' ? 'Este mes' : 'Este año';
             return (
               <>
-                <MiniBarChart data={actividad} />
+                <div className="min-w-0 overflow-x-auto">
+                  <MiniBarChart data={actividad} />
+                </div>
                 <div className="mt-4 flex justify-between text-sm text-slate-500">
-                  <span>Cupones: {totalCuponesSemana}</span>
-                  <span>Últimos 7 días</span>
+                  <span>Cupones vendidos: {total}</span>
+                  <span>{subtitulo}</span>
                 </div>
               </>
             );
