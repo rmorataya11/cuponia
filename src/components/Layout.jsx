@@ -1,5 +1,7 @@
+import { useState, useEffect } from 'react';
 import { Link, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { isAdmin } from '../services/adminService';
 
 function NavLink({ to, children }) {
   const location = useLocation();
@@ -21,6 +23,19 @@ function NavLink({ to, children }) {
 export default function Layout() {
   const { user, loading, logout } = useAuth();
   const navigate = useNavigate();
+  const [admin, setAdmin] = useState(false);
+
+  useEffect(() => {
+    if (!user) {
+      setAdmin(false);
+      return;
+    }
+    let cancelled = false;
+    isAdmin(user.uid).then((ok) => {
+      if (!cancelled) setAdmin(ok);
+    });
+    return () => { cancelled = true; };
+  }, [user]);
 
   function handleLogout() {
     logout();
@@ -45,6 +60,14 @@ export default function Layout() {
                 {user ? (
                   <>
                     <NavLink to="/mis-cupones">Mis cupones</NavLink>
+                    {admin && (
+                      <Link
+                        to="/admin"
+                        className="px-3 py-2 text-sm font-medium rounded-lg transition-colors duration-150 text-amber-700 hover:text-amber-800 hover:bg-amber-50"
+                      >
+                        Panel admin
+                      </Link>
+                    )}
                     <button
                       type="button"
                       onClick={handleLogout}

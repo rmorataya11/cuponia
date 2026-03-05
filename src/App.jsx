@@ -8,11 +8,21 @@ import ComprarPage from './pages/ComprarPage';
 import RegistroPage from './pages/RegistroPage';
 import LoginPage from './pages/LoginPage';
 import MisCuponesPage from './pages/MisCuponesPage';
+import CuponiaAdminDashboard from './pages/AdminDashboard';
+import AdminRoute from './components/AdminRoute';
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route
+          path="/admin"
+          element={
+            <AdminRoute>
+              <CuponiaAdminDashboard />
+            </AdminRoute>
+          }
+        />
         <Route path="/" element={<Layout />}>
           <Route index element={<HomePage />} />
           <Route path="ofertas" element={<OfertasPage />} />

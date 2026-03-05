@@ -2,35 +2,46 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Rubros: lectura pública (para filtrar ofertas). Escritura restringida.
+    // Usuario admin: existe un documento en admins con id = uid.
+    function isAdmin() {
+      return request.auth != null && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // Admins: solo el propio usuario puede leer (para saber si es admin). Escritura desde consola/backend.
+    match /admins/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    // Rubros: lectura pública. Escritura solo admin.
     match /rubros/{rubroId} {
       allow read: if true;
-      allow write: if false;
+      allow write: if isAdmin();
     }
 
-    // Empresas: lectura pública (para mostrar datos en ofertas). Escritura restringida.
+    // Empresas: lectura pública. Escritura solo admin.
     match /empresas/{empresaId} {
       allow read: if true;
-      allow write: if false;
+      allow write: if isAdmin();
     }
 
-    // Ofertas: lectura pública. Solo usuarios autenticados pueden actualizar (ej. cuponesVendidos al comprar).
+    // Ofertas: lectura pública. Update: usuario autenticado (cuponesVendidos). Create/delete: admin.
     match /ofertas/{ofertaId} {
       allow read: if true;
-      allow create, delete: if false;
+      allow create, delete: if isAdmin();
       allow update: if request.auth != null;
     }
 
-    // Clientes: cada usuario solo accede a su propio documento (id = uid).
+    // Clientes: cada usuario su documento, o admin lee/escribe todos.
     match /clientes/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read, write: if (request.auth != null && request.auth.uid == userId) || isAdmin();
     }
 
-    // Cupones: el cliente solo lee los suyos y puede crear cupones con su propio clienteId.
+    // Cupones: cliente solo los suyos; admin puede leer todos.
     match /cupones/{cuponId} {
-      allow read: if request.auth != null && resource.data.clienteId == request.auth.uid;
+      allow read: if (request.auth != null && resource.data.clienteId == request.auth.uid) || isAdmin();
       allow create: if request.auth != null && request.resource.data.clienteId == request.auth.uid;
-      allow update, delete: if request.auth != null && resource.data.clienteId == request.auth.uid;
+      allow update, delete: if (request.auth != null && resource.data.clienteId == request.auth.uid) || isAdmin();
     }
   }
 }

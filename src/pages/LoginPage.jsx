@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { isAdmin } from '../services/adminService';
 
 const ERROR_MESSAGES = {
   'auth/invalid-credential': 'Correo o contraseña incorrectos.',
@@ -32,8 +33,9 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
     try {
-      await login(form.correo.trim(), form.password);
-      navigate(from, { replace: true });
+      const cred = await login(form.correo.trim(), form.password);
+      const admin = cred?.user?.uid ? await isAdmin(cred.user.uid) : false;
+      navigate(admin ? '/admin' : from, { replace: true });
     } catch (err) {
       const message = ERROR_MESSAGES[err.code] || err.message || 'Error al iniciar sesión.';
       setError(message);
