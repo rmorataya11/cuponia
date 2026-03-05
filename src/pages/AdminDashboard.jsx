@@ -5,6 +5,8 @@ import {
   getOfertasTodas,
   updateOfertaEstado,
   addOferta,
+  updateOferta,
+  uploadOfertaImagen,
   getRubros,
   addRubro,
   updateRubro,
@@ -84,6 +86,18 @@ function mapOfertasParaUI(ofertas, empresas, rubros) {
       inicio: o.fechaInicio,
       fin: o.fechaFin,
       fechaLimiteUso: o.fechaLimiteUso,
+      // Campos para editar
+      empresaId: o.empresaId ?? '',
+      rubroId: o.rubroId ?? '',
+      precioRegular: o.precioRegular ?? '',
+      precioOferta: o.precioOferta ?? '',
+      cantidadLimite: o.cantidadLimite != null ? String(o.cantidadLimite) : '',
+      fechaInicio: (o.fechaInicio || '').slice(0, 10),
+      fechaFin: (o.fechaFin || '').slice(0, 10),
+      fechaLimiteUso: (o.fechaLimiteUso || '').slice(0, 10),
+      descripcion: o.descripcion ?? '',
+      otrosDetalles: o.otrosDetalles ?? '',
+      fotoURL: o.fotoURL ?? '',
     };
   });
 }
@@ -669,12 +683,20 @@ function DashboardOverview({ ofertas, setOfertas, cupones = [], totalClientes = 
 }
 
 // --- Sección Ofertas ---
+const IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp,image/gif';
+
 function OfertasSection({ ofertas, setOfertas, empresas = [], rubros = [], onRefetch }) {
   const [filtro, setFiltro] = useState('todas');
   const [modal, setModal] = useState(null);
   const [showForm, setShowForm] = useState(false);
+  const [editingOferta, setEditingOferta] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [uploadImageError, setUploadImageError] = useState('');
+  const [isDragging, setIsDragging] = useState(false);
+  const [showUrlInput, setShowUrlInput] = useState(false);
+  const fileInputRef = useRef(null);
   const [form, setForm] = useState({
     empresaId: '',
     rubroId: '',
@@ -700,7 +722,80 @@ function OfertasSection({ ofertas, setOfertas, empresas = [], rubros = [], onRef
     setError('');
   };
 
-  const handleCreateOferta = async (e) => {
+  const processImageFile = async (file) => {
+    if (!file || !file.type.startsWith('image/')) {
+      setUploadImageError('Solo se permiten imágenes (JPG, PNG, WebP, GIF).');
+      return;
+    }
+    setUploadImageError('');
+    setUploadingImage(true);
+    try {
+      const url = await uploadOfertaImagen(file);
+      setForm((prev) => ({ ...prev, fotoURL: url }));
+    } catch (err) {
+      setUploadImageError(err?.message || 'No se pudo subir la imagen.');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer?.files?.[0];
+    if (file) processImageFile(file);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleFileSelect = (e) => {
+    const file = e.target?.files?.[0];
+    if (file) processImageFile(file);
+    e.target.value = '';
+  };
+
+  const openCreateForm = () => {
+    setEditingOferta(null);
+    setForm({ empresaId: '', rubroId: '', titulo: '', precioRegular: '', precioOferta: '', fechaInicio: '', fechaFin: '', fechaLimiteUso: '', cantidadLimite: '', descripcion: '', otrosDetalles: '', fotoURL: '' });
+    setUploadImageError('');
+    setShowUrlInput(false);
+    setError('');
+    setShowForm(true);
+  };
+
+  const openEditForm = (o) => {
+    setEditingOferta(o);
+    setForm({
+      empresaId: o.empresaId ?? '',
+      rubroId: o.rubroId ?? '',
+      titulo: o.titulo ?? '',
+      precioRegular: o.precioRegular != null && o.precioRegular !== '' ? String(o.precioRegular) : '',
+      precioOferta: o.precioOferta != null && o.precioOferta !== '' ? String(o.precioOferta) : '',
+      fechaInicio: (o.fechaInicio || '').slice(0, 10),
+      fechaFin: (o.fechaFin || '').slice(0, 10),
+      fechaLimiteUso: (o.fechaLimiteUso || '').slice(0, 10),
+      cantidadLimite: o.cantidadLimite != null ? String(o.cantidadLimite) : '',
+      descripcion: o.descripcion ?? '',
+      otrosDetalles: o.otrosDetalles ?? '',
+      fotoURL: o.fotoURL ?? '',
+    });
+    setUploadImageError('');
+    setShowUrlInput(false);
+    setError('');
+    setShowForm(true);
+  };
+
+  const handleSubmitOferta = async (e) => {
     e.preventDefault();
     if (!form.titulo.trim()) { setError('El título es obligatorio.'); return; }
     if (!form.empresaId) { setError('Elegí una empresa.'); return; }
@@ -708,13 +803,20 @@ function OfertasSection({ ofertas, setOfertas, empresas = [], rubros = [], onRef
     setError('');
     setSaving(true);
     try {
-      await addOferta(form);
+      if (editingOferta) {
+        await updateOferta(editingOferta.id, form);
+        setEditingOferta(null);
+      } else {
+        await addOferta(form);
+      }
       setForm({ empresaId: '', rubroId: '', titulo: '', precioRegular: '', precioOferta: '', fechaInicio: '', fechaFin: '', fechaLimiteUso: '', cantidadLimite: '', descripcion: '', otrosDetalles: '', fotoURL: '' });
+      setUploadImageError('');
+      setShowUrlInput(false);
       setShowForm(false);
       await onRefetch?.();
     } catch (err) {
       console.error(err);
-      setError(err?.message || 'No se pudo crear la oferta.');
+      setError(err?.message || (editingOferta ? 'No se pudo actualizar la oferta.' : 'No se pudo crear la oferta.'));
     } finally {
       setSaving(false);
     }
@@ -765,7 +867,7 @@ function OfertasSection({ ofertas, setOfertas, empresas = [], rubros = [], onRef
         ))}
         <button
           type="button"
-          onClick={() => { setShowForm((v) => !v); setError(''); }}
+          onClick={() => (showForm ? (setShowForm(false), setEditingOferta(null)) : openCreateForm())}
           className="px-4 py-2 rounded-lg text-white font-medium"
           style={{ backgroundColor: PRIMARY }}
         >
@@ -774,9 +876,9 @@ function OfertasSection({ ofertas, setOfertas, empresas = [], rubros = [], onRef
       </div>
 
       {showForm && (
-        <form onSubmit={handleCreateOferta} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4 max-w-2xl">
+        <form onSubmit={handleSubmitOferta} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4 max-w-2xl">
           {error && <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-800 text-sm" role="alert">{error}</div>}
-          <h3 className="font-bold text-slate-900">Nueva oferta</h3>
+          <h3 className="font-bold text-slate-900">{editingOferta ? 'Editar oferta' : 'Nueva oferta'}</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold tracking-wider text-slate-400 uppercase mb-1">Empresa *</label>
@@ -797,8 +899,71 @@ function OfertasSection({ ofertas, setOfertas, empresas = [], rubros = [], onRef
               </select>
             </div>
             <div className="sm:col-span-2">
-              <label className="block text-xs font-semibold tracking-wider text-slate-400 uppercase mb-1">URL de la imagen (opcional)</label>
-              <input type="url" name="fotoURL" value={form.fotoURL} onChange={handleFormChange} className="w-full px-4 py-2 border border-slate-200 rounded-lg bg-white focus:border-[#2d3fc2] focus:outline-none text-slate-900" placeholder="https://ejemplo.com/imagen.jpg" />
+              <label className="block text-xs font-semibold tracking-wider text-slate-400 uppercase mb-1">Imagen de la oferta (opcional)</label>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={IMAGE_ACCEPT}
+                onChange={handleFileSelect}
+                className="hidden"
+                aria-hidden="true"
+              />
+              {form.fotoURL ? (
+                <div className="flex items-start gap-3 p-3 border border-slate-200 rounded-lg bg-slate-50">
+                  <img src={form.fotoURL} alt="Vista previa" className="w-24 h-24 object-cover rounded-lg shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-slate-600">Imagen cargada.</p>
+                    <button
+                      type="button"
+                      onClick={() => setForm((prev) => ({ ...prev, fotoURL: '' }))}
+                      className="mt-1 text-sm font-medium text-red-600 hover:text-red-700"
+                    >
+                      Quitar imagen
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div
+                  onDrop={handleDrop}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+                    isDragging
+                      ? 'border-[#2d3fc2] bg-[#2d3fc2]/5'
+                      : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                  } ${uploadingImage ? 'pointer-events-none opacity-70' : ''}`}
+                >
+                  {uploadingImage ? (
+                    <p className="text-sm text-slate-500">Subiendo imagen...</p>
+                  ) : (
+                    <>
+                      <p className="text-sm font-medium text-slate-700">Arrastrá una imagen aquí o haz clic para elegir</p>
+                      <p className="text-xs text-slate-500 mt-1">Solo imágenes (JPG, PNG, WebP, GIF)</p>
+                    </>
+                  )}
+                </div>
+              )}
+              {uploadImageError && (
+                <p className="mt-1 text-sm text-red-600" role="alert">{uploadImageError}</p>
+              )}
+              <button
+                type="button"
+                onClick={() => setShowUrlInput((v) => !v)}
+                className="mt-2 text-xs text-slate-500 hover:text-slate-700"
+              >
+                {showUrlInput ? 'Ocultar URL' : 'O pegar URL de imagen'}
+              </button>
+              {showUrlInput && (
+                <input
+                  type="url"
+                  name="fotoURL"
+                  value={form.fotoURL}
+                  onChange={handleFormChange}
+                  className="mt-2 w-full px-4 py-2 border border-slate-200 rounded-lg bg-white focus:border-[#2d3fc2] focus:outline-none text-slate-900 text-sm"
+                  placeholder="https://ejemplo.com/imagen.jpg"
+                />
+              )}
             </div>
             <div className="sm:col-span-2">
               <label className="block text-xs font-semibold tracking-wider text-slate-400 uppercase mb-1">Título *</label>
@@ -839,9 +1004,9 @@ function OfertasSection({ ofertas, setOfertas, empresas = [], rubros = [], onRef
           </div>
           <div className="flex gap-2">
             <button type="submit" disabled={saving} className="px-4 py-2 rounded-lg text-white font-medium disabled:opacity-50" style={{ backgroundColor: PRIMARY }}>
-              {saving ? 'Guardando...' : 'Crear oferta (pendiente de aprobación)'}
+              {saving ? 'Guardando...' : editingOferta ? 'Guardar cambios' : 'Crear oferta (pendiente de aprobación)'}
             </button>
-            <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 rounded-lg bg-slate-100 text-slate-600 font-medium hover:bg-slate-200">
+            <button type="button" onClick={() => { setShowForm(false); setEditingOferta(null); }} className="px-4 py-2 rounded-lg bg-slate-100 text-slate-600 font-medium hover:bg-slate-200">
               Cancelar
             </button>
           </div>
@@ -908,6 +1073,7 @@ function OfertasSection({ ofertas, setOfertas, empresas = [], rubros = [], onRef
                       )}
                       <button
                         type="button"
+                        onClick={() => openEditForm(o)}
                         className="px-2 py-1 rounded text-slate-600 bg-slate-100 hover:bg-slate-200 text-sm"
                       >
                         ✎ editar

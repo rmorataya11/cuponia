@@ -1,0 +1,10 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Imágenes de ofertas: lectura pública (para mostrar en la app), escritura solo usuarios autenticados (admin sube desde el panel).
+    match /ofertas/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+  }
+}

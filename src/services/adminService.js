@@ -7,7 +7,8 @@ import {
   updateDoc,
   addDoc,
 } from 'firebase/firestore';
-import { db } from '../firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage } from '../firebase';
 
 /**
  * Comprueba si el usuario con uid está en la colección admins.
@@ -29,14 +30,45 @@ export async function isAdmin(uid) {
 
 // --- Ofertas ---
 
+/** Sube una imagen a Storage en ofertas/{timestamp}_{nombre} y devuelve la URL de descarga. Solo imágenes. */
+export async function uploadOfertaImagen(file) {
+  if (!file || !file.type.startsWith('image/')) {
+    throw new Error('Solo se permiten archivos de imagen.');
+  }
+  const ext = (file.name.match(/\.[a-zA-Z0-9]+$/) || ['.jpg'])[0];
+  const path = `ofertas/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_').slice(0, 80)}${ext}`;
+  const storageRef = ref(storage, path);
+  await uploadBytes(storageRef, file, { contentType: file.type });
+  return getDownloadURL(storageRef);
+}
+
 export async function getOfertasTodas() {
   const snap = await getDocs(collection(db, 'ofertas'));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
 export async function updateOfertaEstado(id, estado) {
-  const ref = doc(db, 'ofertas', id);
-  await updateDoc(ref, { estado });
+  const docRef = doc(db, 'ofertas', id);
+  await updateDoc(docRef, { estado });
+}
+
+/** Actualiza los campos editables de una oferta (no modifica estado ni cuponesVendidos). */
+export async function updateOferta(id, data) {
+  const docRef = doc(db, 'ofertas', id);
+  await updateDoc(docRef, {
+    titulo: data.titulo ?? '',
+    precioRegular: Number(data.precioRegular) || 0,
+    precioOferta: Number(data.precioOferta) ?? Number(data.precioRegular) ?? 0,
+    fechaInicio: (data.fechaInicio || '').slice(0, 10),
+    fechaFin: (data.fechaFin || '').slice(0, 10),
+    fechaLimiteUso: (data.fechaLimiteUso || data.fechaFin || '').slice(0, 10),
+    cantidadLimite: data.cantidadLimite === '' || data.cantidadLimite == null ? null : Number(data.cantidadLimite),
+    descripcion: data.descripcion ?? '',
+    otrosDetalles: data.otrosDetalles ?? '',
+    empresaId: data.empresaId ?? '',
+    rubroId: data.rubroId ?? '',
+    fotoURL: (data.fotoURL || '').trim() || null,
+  });
 }
 
 export async function addOferta(data) {
