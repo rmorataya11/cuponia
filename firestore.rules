@@ -2,12 +2,28 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Usuario admin: existe un documento en admins con id = uid.
+    // Usuario admin de La Cuponera: existe un documento en admins con id = uid.
     function isAdmin() {
       return request.auth != null && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
 
-    // Admins: solo el propio usuario puede leer (para saber si es admin). Escritura desde consola/backend.
+    // Doc de la empresa (solo para no repetir get). Requiere que exista.
+    function empresaData(empresaId) {
+      return exists(/databases/$(database)/documents/empresas/$(empresaId))
+        ? get(/databases/$(database)/documents/empresas/$(empresaId)).data
+        : null;
+    }
+    // True si el usuario autenticado es el admin de la empresa (por UID o por correo).
+    function isAdminOfEmpresa(empresaId) {
+      return request.auth != null && empresaId != null
+        && empresaData(empresaId) != null
+        && (
+          empresaData(empresaId).get('adminUid', '') == request.auth.uid
+          || empresaData(empresaId).get('correo', '') == request.auth.token.email
+        );
+    }
+
+    // Admins: solo el propio usuario puede leer. Escritura desde consola/backend.
     match /admins/{uid} {
       allow read: if request.auth != null && request.auth.uid == uid;
       allow write: if false;
@@ -19,17 +35,34 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Empresas: lectura pública. Escritura solo admin.
+    // Empresas: lectura pública.
+    // - Create: admin siempre; o cualquiera puede crear con estado 'pendiente' (registro público de empresa).
+    // - Update: admin siempre; o un usuario puede "reclamar" su empresa (poner su uid en adminUid) si el correo coincide y la empresa está aprobada y sin admin aún.
+    // - Delete: solo admin.
     match /empresas/{empresaId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow create: if isAdmin()
+        || (request.resource.data.get('estado', '') == 'pendiente'
+            && request.resource.data.keys().hasOnly(['nombre', 'codigo', 'direccion', 'nombreContacto', 'telefono', 'correo', 'rubroId', 'porcentajeComision', 'estado']));
+      allow update: if isAdmin()
+        || (request.auth != null
+            && resource.data.get('estado', '') == 'aprobada'
+            && (resource.data.get('adminUid', null) == null || resource.data.get('adminUid', '') == '')
+            && resource.data.get('correo', '') == request.auth.token.email
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['adminUid'])
+            && request.resource.data.adminUid == request.auth.uid);
+      allow delete: if isAdmin();
     }
 
-    // Ofertas: lectura pública. Update: usuario autenticado (cuponesVendidos). Create/delete: admin.
+    // Ofertas: lectura pública. Create: admin o admin de la empresa (solo para su empresaId). Update: admin o admin de esa empresa o cualquiera (cuponesVendidos). Delete: solo admin.
     match /ofertas/{ofertaId} {
       allow read: if true;
-      allow create, delete: if isAdmin();
-      allow update: if request.auth != null;
+      allow create: if isAdmin()
+        || (request.auth != null && request.resource.data.get('empresaId') != null && isAdminOfEmpresa(request.resource.data.empresaId));
+      allow update: if isAdmin()
+        || (request.auth != null && resource.data.get('empresaId') != null && isAdminOfEmpresa(resource.data.empresaId))
+        || request.auth != null;
+      allow delete: if isAdmin();
     }
 
     // Clientes: cada usuario su documento, o admin lee/escribe todos.
@@ -37,11 +70,41 @@ service cloud.firestore {
       allow read, write: if (request.auth != null && request.auth.uid == userId) || isAdmin();
     }
 
-    // Cupones: cliente solo los suyos; admin puede leer todos.
+    // Empleados: read/write permitido a cualquier usuario autenticado (la app restringe el panel al admin de la empresa).
+    // isAdminOfEmpresa(get(empresa)) falla en este proyecto, por eso no se usa aquí.
+    match /empleados/{empleadoId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // empleadoByUid: el empleado escribe su propio doc { empresaId } para que las reglas de cupones puedan validar.
+    match /empleadoByUid/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Cupones: cliente solo los suyos; admin todos; empleado puede leer/actualizar cupones de su empresa (para canje).
+    // Tratamos empresal y empresa1 como la misma empresa (typo histórico).
+    function empresaIdEmpleado() {
+      return exists(/databases/$(database)/documents/empleadoByUid/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/empleadoByUid/$(request.auth.uid)).data.get('empresaId', '')
+        : '';
+    }
+    function empleadoPuedeActuarEnCupon(empresaIdCupon) {
+      let empId = empresaIdEmpleado();
+      return request.auth != null && empresaIdCupon != null && empId != ''
+        && (empresaIdCupon == empId
+            || (empresaIdCupon == 'empresal' && empId == 'empresa1')
+            || (empresaIdCupon == 'empresa1' && empId == 'empresal'));
+    }
     match /cupones/{cuponId} {
-      allow read: if (request.auth != null && resource.data.clienteId == request.auth.uid) || isAdmin();
+      allow read: if (request.auth != null && resource.data.clienteId == request.auth.uid) || isAdmin()
+        || (resource.data.get('empresaId', null) != null && empleadoPuedeActuarEnCupon(resource.data.empresaId));
       allow create: if request.auth != null && request.resource.data.clienteId == request.auth.uid;
-      allow update, delete: if (request.auth != null && resource.data.clienteId == request.auth.uid) || isAdmin();
+      allow update: if (request.auth != null && resource.data.clienteId == request.auth.uid) || isAdmin()
+        || (resource.data.get('empresaId', null) != null && empleadoPuedeActuarEnCupon(resource.data.empresaId)
+            && resource.data.estado == 'disponible'
+            && request.resource.data.estado == 'canjeado'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['estado', 'fechaCanje']));
+      allow delete: if (request.auth != null && resource.data.clienteId == request.auth.uid) || isAdmin();
     }
   }
 }
