@@ -25,6 +25,25 @@ export default {
         'card': '0 1px 2px rgb(0 0 0 / 0.04)',
         'card-hover': '0 4px 12px rgb(0 0 0 / 0.06)',
       },
+      keyframes: {
+        'fade-in-up': {
+          '0%': { opacity: '0', transform: 'translateY(16px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        'fade-in': {
+          '0%': { opacity: '0' },
+          '100%': { opacity: '1' },
+        },
+        'float': {
+          '0%, 100%': { transform: 'translateY(0) scale(1)' },
+          '50%': { transform: 'translateY(-14px) scale(1.05)' },
+        },
+      },
+      animation: {
+        'fade-in-up': 'fade-in-up 0.6s ease-out both',
+        'fade-in': 'fade-in 0.5s ease-out forwards',
+        'float': 'float 5s ease-in-out infinite',
+      },
     },
   },
   plugins: [],
