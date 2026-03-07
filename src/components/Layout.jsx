@@ -162,9 +162,11 @@ export default function Layout() {
       </header>
       <main className={`flex-1 w-full ${isFullWidthRoute ? 'p-0 min-h-0' : 'max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-12'}`}>
         {!isFullWidthRoute && rol === 'cliente' && clienteNombre && (
-          <p className="text-slate-600 text-lg mb-4">Bienvenido, {clienteNombre}.</p>
+          <p className="text-slate-600 text-lg mb-4 animate-fade-in-up" style={{ animationDelay: '0.05s' }}>Bienvenido, {clienteNombre}.</p>
         )}
-        <Outlet />
+        <div key={location.pathname} className="animate-fade-in-up min-h-0" style={{ animationDelay: '0.08s' }}>
+          <Outlet />
+        </div>
       </main>
     </div>
   );
